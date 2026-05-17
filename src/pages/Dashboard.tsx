@@ -17,9 +17,7 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  ResponsiveContainer,
-  AreaChart,
-  Area
+  ResponsiveContainer
 } from "recharts";
 import { useAuth } from "../AuthContext";
 import { db } from "../lib/firebase";
@@ -35,18 +33,9 @@ const Dashboard: React.FC = () => {
     vulnerabilitiesFound: 0,
     criticalIssues: 0,
     recentScans: [] as Scan[],
+    chartData: [] as any[],
   });
   const [loading, setLoading] = useState(true);
-
-  const chartData = [
-    { name: "Mon", scans: 4 },
-    { name: "Tue", scans: 6 },
-    { name: "Wed", scans: 8 },
-    { name: "Thu", scans: 12 },
-    { name: "Fri", scans: 10 },
-    { name: "Sat", scans: 11 },
-    { name: "Sun", scans: 15 },
-  ];
 
   useEffect(() => {
     if (!user) return;
@@ -67,11 +56,39 @@ const Dashboard: React.FC = () => {
         let totalVulns = 0;
         scans.forEach(s => totalVulns += s.vulnerabilityCount || 0);
 
+        // Process Chart Data (Last 7 days)
+        const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        const now = new Date();
+        const last7Days = Array.from({ length: 7 }).map((_, i) => {
+          const d = new Date();
+          d.setDate(now.getDate() - (6 - i));
+          return {
+            dateStr: format(d, "yyyy-MM-dd"),
+            label: days[d.getDay()],
+            completed: 0,
+            failed: 0,
+            pending: 0,
+          };
+        });
+
+        scans.forEach(scan => {
+          if (!scan.createdAt) return;
+          const scanDate = scan.createdAt.toDate();
+          const scanDateStr = format(scanDate, "yyyy-MM-dd");
+          const dayData = last7Days.find(d => d.dateStr === scanDateStr);
+          if (dayData) {
+            if (scan.status === "completed") dayData.completed++;
+            else if (scan.status === "failed") dayData.failed++;
+            else dayData.pending++;
+          }
+        });
+
         setStats({
           totalScans: scans.length,
           vulnerabilitiesFound: totalVulns,
-          criticalIssues: scans.reduce((acc, s) => acc + (s.vulnerabilityCount > 5 ? 1 : 0), 0), // Mock logic for critical
+          criticalIssues: scans.reduce((acc, s) => acc + (s.vulnerabilityCount > 5 ? 1 : 0), 0),
           recentScans: scans.slice(0, 5),
+          chartData: last7Days,
         });
       } catch (err) {
         console.error("Error fetching dashboard stats:", err);
@@ -134,31 +151,29 @@ const Dashboard: React.FC = () => {
         {/* Chart Column */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-[#111114] border border-slate-800 rounded-2xl p-6">
-             <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center justify-between mb-8">
                 <h3 className="text-sm font-bold text-white uppercase tracking-widest">Scanning Frequency</h3>
-                <div className="flex gap-2 text-[10px] font-bold text-slate-500">
-                   <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-cyan-500" /> COMPLETED</div>
-                   <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-slate-700" /> PENDING</div>
+                <div className="flex gap-4 text-[10px] font-bold text-slate-500">
+                   <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-green-500" /> COMPLETED</div>
+                   <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-red-500" /> FAILED</div>
+                   <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-cyan-500" /> PENDING</div>
                 </div>
              </div>
              <div className="h-[300px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData}>
-                    <defs>
-                      <linearGradient id="colorScans" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#0891b2" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#0891b2" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
+                  <BarChart data={stats.chartData} barGap={8}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
-                    <XAxis dataKey="name" stroke="#64748b" fontSize={10} fontWeight="bold" axisLine={false} tickLine={false} />
+                    <XAxis dataKey="label" stroke="#64748b" fontSize={10} fontWeight="bold" axisLine={false} tickLine={false} />
                     <YAxis stroke="#64748b" fontSize={10} fontWeight="bold" axisLine={false} tickLine={false} />
                     <Tooltip 
+                      cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
                       contentStyle={{ backgroundColor: "#111114", border: "1px solid #1e293b", borderRadius: "12px", fontSize: "12px" }} 
-                      itemStyle={{ color: "#22d3ee" }}
+                      itemStyle={{ fontWeight: "700" }}
                     />
-                    <Area type="monotone" dataKey="scans" stroke="#0891b2" strokeWidth={3} fillOpacity={1} fill="url(#colorScans)" />
-                  </AreaChart>
+                    <Bar dataKey="completed" stackId="a" fill="#22c55e" radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="failed" stackId="a" fill="#ef4444" radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="pending" stackId="a" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                  </BarChart>
                 </ResponsiveContainer>
              </div>
           </div>

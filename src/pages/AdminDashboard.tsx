@@ -11,16 +11,20 @@ import {
   Unlock,
   Terminal,
   ShieldCheck,
-  AlertOctagon
+  AlertOctagon,
+  Clock,
+  ExternalLink
 } from "lucide-react";
 import { db } from "../lib/firebase";
-import { collection, query, getDocs, doc, deleteDoc, updateDoc, orderBy, limit } from "firebase/firestore";
-import { UserProfile, Scan } from "../types";
+import { collection, query, getDocs, doc, deleteDoc, updateDoc, orderBy, limit, onSnapshot } from "firebase/firestore";
+import { UserProfile, Scan, SystemLog } from "../types";
 import { motion, AnimatePresence } from "motion/react";
 import { format } from "date-fns";
+import { logActivity } from "../lib/logger";
 
 const AdminDashboard: React.FC = () => {
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [logs, setLogs] = useState<SystemLog[]>([]);
   const [globalStats, setGlobalStats] = useState({
     totalUsers: 0,
     totalScans: 0,
@@ -29,38 +33,44 @@ const AdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"users" | "logs">("users");
 
-  const fetchData = async () => {
-    try {
-      // Fetch Users
-      const usersSnap = await getDocs(collection(db, "users"));
-      const usersData = usersSnap.docs.map(d => d.data() as UserProfile);
+  useEffect(() => {
+    // Real-time Users
+    const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
+      const usersData = snap.docs.map(d => d.data() as UserProfile);
       setUsers(usersData);
+      setGlobalStats(prev => ({ ...prev, totalUsers: usersData.length }));
+    });
 
-      // Fetch Scans for Stats
+    // Real-time Logs
+    const unsubLogs = onSnapshot(query(collection(db, "logs"), orderBy("createdAt", "desc"), limit(50)), (snap) => {
+      setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() } as SystemLog)));
+    });
+
+    // Stats for scans
+    const fetchScanStats = async () => {
       const scansSnap = await getDocs(collection(db, "scans"));
       const scans = scansSnap.docs.map(d => d.data() as Scan);
-      
-      setGlobalStats({
-        totalUsers: usersData.length,
+      setGlobalStats(prev => ({
+        ...prev,
         totalScans: scans.length,
         criticalVulns: scans.reduce((acc, s) => acc + (s.vulnerabilityCount > 5 ? 1 : 0), 0),
-      });
-    } catch (err) {
-      console.error("Admin fetch failed:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+      }));
+    };
 
-  useEffect(() => {
-    fetchData();
+    fetchScanStats();
+    setLoading(false);
+
+    return () => {
+      unsubUsers();
+      unsubLogs();
+    };
   }, []);
 
   const handleDeleteUser = async (userId: string) => {
     if (!window.confirm("CRITICAL: This will permanently purge the user and all associated security data. Proceed?")) return;
     try {
       await deleteDoc(doc(db, "users", userId));
-      setUsers(users.filter(u => u.uid !== userId));
+      await logActivity(`Admin purged user profile: ${userId}`);
     } catch (err) {
       console.error("Failed to delete user:", err);
     }
@@ -70,7 +80,7 @@ const AdminDashboard: React.FC = () => {
     const newRole = user.role === "admin" ? "user" : "admin";
     try {
       await updateDoc(doc(db, "users", user.uid), { role: newRole });
-      setUsers(users.map(u => u.uid === user.uid ? { ...u, role: newRole as "admin" | "user" } : u));
+      await logActivity(`Admin changed role for ${user.displayName} to ${newRole}`);
     } catch (err) {
       console.error("Failed to update role:", err);
     }
@@ -184,9 +194,42 @@ const AdminDashboard: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="bg-[#111114] border border-slate-800 rounded-3xl p-20 text-center text-slate-600 font-mono tracking-widest animate-pulse">
-           ACCESSING_SYSTEM_EVENT_HISTORY...
-           <div className="mt-4 text-[10px] opacity-50 uppercase">Waiting for data stream buffer</div>
+        <div className="bg-[#111114] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+          <div className="p-6 border-b border-slate-800 bg-[#15151a] flex items-center gap-2">
+             <Clock className="text-cyan-500 w-5 h-5" />
+             <h3 className="text-sm font-bold text-white uppercase tracking-widest">System Event History</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800">
+                  <th className="p-4 pl-8 text-[10px] font-black text-slate-500 uppercase tracking-widest">Timestamp</th>
+                  <th className="p-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">Event_Description</th>
+                  <th className="p-4 pr-8 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Operator_UID</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/30 font-mono">
+                {logs.map(log => (
+                  <tr key={log.id} className="hover:bg-slate-900/40 transition-colors">
+                    <td className="p-4 pl-8 text-[10px] text-cyan-500 whitespace-nowrap">
+                      {log.createdAt?.toDate ? format(log.createdAt.toDate(), "yyyy.MM.dd HH:mm:ss") : "STREAMING..."}
+                    </td>
+                    <td className="p-4 text-xs font-bold text-slate-200">
+                      {log.activity}
+                    </td>
+                    <td className="p-4 pr-8 text-[10px] text-slate-600 text-right">
+                      {log.userId}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {logs.length === 0 && (
+              <div className="p-20 text-center text-slate-600 uppercase tracking-[0.3em] animate-pulse">
+                No system events recorded in the current buffer
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

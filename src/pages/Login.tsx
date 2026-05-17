@@ -4,6 +4,7 @@ import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 
 import { auth } from "../lib/firebase";
 import { Shield, Mail, Lock, AlertCircle } from "lucide-react";
 import { motion } from "motion/react";
+import { logActivity } from "../lib/logger";
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -18,6 +19,7 @@ const Login: React.FC = () => {
     setError("");
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      await logActivity("Operator session initiated via email/key");
       navigate("/dashboard");
     } catch (err: any) {
       setError("Invalid credentials. Please verify your email and password.");
@@ -30,6 +32,7 @@ const Login: React.FC = () => {
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(auth, provider);
+      await logActivity("Operator session initiated via Google Auth");
       navigate("/dashboard");
     } catch (err: any) {
       setError("Google authentication failed.");
@@ -83,6 +86,12 @@ const Login: React.FC = () => {
                 placeholder="••••••••"
               />
             </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Link to="/forgot-password" size="sm" className="text-[10px] font-black text-slate-500 hover:text-cyan-500 uppercase tracking-widest transition-colors">
+              Forgot Secret Key?
+            </Link>
           </div>
 
           {error && (

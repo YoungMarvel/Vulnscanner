@@ -5,6 +5,7 @@ import { auth, db } from "../lib/firebase";
 import { doc, setDoc } from "firebase/firestore";
 import { Shield, Mail, Lock, User, AlertCircle } from "lucide-react";
 import { motion } from "motion/react";
+import { logActivity } from "../lib/logger";
 
 const Register: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -33,6 +34,7 @@ const Register: React.FC = () => {
         createdAt: new Date(),
       });
       
+      await logActivity("New operator identity registered");
       navigate("/dashboard");
     } catch (err: any) {
       setError(err.message || "Registration failed. Please try again.");

@@ -5,6 +5,7 @@ import { updateProfile, updatePassword } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
 import { motion } from "motion/react";
+import { logActivity } from "../lib/logger";
 
 const Profile: React.FC = () => {
   const { profile, user } = useAuth();
@@ -22,6 +23,7 @@ const Profile: React.FC = () => {
     try {
       await updateProfile(user, { displayName });
       await updateDoc(doc(db, "users", user.uid), { displayName });
+      await logActivity("Operator callsign updated");
       setMessage({ type: "success", text: "Operator profile updated successfully." });
     } catch (err: any) {
       setMessage({ type: "error", text: err.message });
@@ -38,6 +40,7 @@ const Profile: React.FC = () => {
 
     try {
       await updatePassword(user, newPassword);
+      await logActivity("Security key rotated by operator");
       setMessage({ type: "success", text: "Security key rotated successfully." });
       setNewPassword("");
     } catch (err: any) {

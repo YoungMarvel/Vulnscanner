@@ -11,6 +11,7 @@ import ScanResults from "./pages/ScanResults";
 import ScanHistory from "./pages/ScanHistory";
 import AdminDashboard from "./pages/AdminDashboard";
 import Profile from "./pages/Profile";
+import ForgotPassword from "./pages/ForgotPassword";
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; adminOnly?: boolean }> = ({ children, adminOnly }) => {
   const { user, profile, loading, isAdmin } = useAuth();
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
 
           {/* Protected User Pages */}
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>

@@ -1,0 +1,74 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- P3: GLOBAL HELPERS ---
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() { 
+      return isSignedIn() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+        request.auth.token.email == 'emmanueledward953@gmail.com'
+      );
+    }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // --- P2: VALIDATION BLUEPRINTS ---
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'role', 'createdAt']) &&
+             data.keys().size() <= 10 &&
+             data.email is string && data.email.size() <= 200 &&
+             data.role in ['admin', 'user'] &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidScan(data) {
+      return data.keys().hasAll(['userId', 'targetUrl', 'status', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.targetUrl is string && data.targetUrl.size() <= 500 &&
+             data.status in ['pending', 'scanning', 'completed', 'failed'] &&
+             data.createdAt == request.time;
+    }
+
+    function isValidVulnerability(data) {
+      return data.keys().hasAll(['scanId', 'type', 'severity']) &&
+             data.scanId is string &&
+             data.type is string && data.type.size() <= 100 &&
+             data.severity in ['low', 'medium', 'high', 'critical'];
+    }
+
+    // --- MATCH BLOCKS ---
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().role == 'user';
+      allow update: if (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['displayName'])) || isAdmin();
+    }
+
+    match /scans/{scanId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidScan(incoming());
+      allow update: if isAdmin(); // Server/Admin updates status
+      allow delete: if isAdmin();
+
+      match /vulnerabilities/{vulnId} {
+        allow read: if isSignedIn() && (get(/databases/$(database)/documents/scans/$(scanId)).data.userId == request.auth.uid || isAdmin());
+        allow write: if isAdmin(); // Only system/logic can write findings
+      }
+    }
+
+    match /logs/{logId} {
+      allow list, get: if isAdmin();
+      allow create: if isSignedIn(); // Users can log their activity
+    }
+  }
+}

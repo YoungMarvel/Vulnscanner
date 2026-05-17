@@ -1,0 +1,73 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and role information",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role"]
+    },
+    "Scan": {
+      "title": "Scan",
+      "description": "Information about a vulnerability scan",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "targetUrl": { "type": "string" },
+        "types": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["pending", "scanning", "completed", "failed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "vulnerabilityCount": { "type": "integer" }
+      },
+      "required": ["userId", "targetUrl", "status", "createdAt"]
+    },
+    "Vulnerability": {
+      "title": "Vulnerability",
+      "description": "A detected vulnerability",
+      "type": "object",
+      "properties": {
+        "scanId": { "type": "string" },
+        "type": { "type": "string" },
+        "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+        "description": { "type": "string" },
+        "affectedArea": { "type": "string" },
+        "recommendation": { "type": "string" }
+      },
+      "required": ["scanId", "type", "severity"]
+    },
+    "Log": {
+      "title": "Log",
+      "description": "System activity logs",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "activity": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["activity", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "scans/{scanId}": {
+      "schema": "Scan",
+      "description": "Individual scan sessions"
+    },
+    "scans/{scanId}/vulnerabilities/{vulnId}": {
+      "schema": "Vulnerability",
+      "description": "Vulnerabilities found in a specific scan"
+    },
+    "logs/{logId}": {
+      "schema": "Log",
+      "description": "System-wide logs"
+    }
+  }
+}
